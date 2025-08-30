@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, BarChart3, FolderPlus, Trash2 } from "lucide-react";
+import { Upload, BarChart3, FolderPlus, Trash2, UserCheck, UserX, Clock, CheckCircle, XCircle } from "lucide-react";
 
 // Types
 type Problem = {
@@ -37,12 +37,27 @@ type StudentProject = {
   year: string;
 };
 
+type PendingStudent = {
+  id: string;
+  email: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  studentId: string;
+  branch: string;
+  year: string;
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
+  password: string;
+};
+
 const YEAR_OPTIONS = ["First Year", "Second Year", "Third Year", "Final Year"];
 const DEPT_OPTIONS = ["CSE", "IT", "ECE", "EEE", "MECH"];
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [dataset, setDataset] = useState<Problem[]>([]);
+  const [pendingStudents, setPendingStudents] = useState<PendingStudent[]>([]);
   const [assignYear, setAssignYear] = useState<string>(YEAR_OPTIONS[0]);
   const [assignDept, setAssignDept] = useState<string>(DEPT_OPTIONS[0]);
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
@@ -82,6 +97,21 @@ export default function AdminDashboard() {
       const rawProj = localStorage.getItem("codepvg_student_projects");
       if (rawProj) setProjects(JSON.parse(rawProj));
     } catch {}
+    try {
+      const rawPending = localStorage.getItem("codepvg_pending_students");
+      if (rawPending) setPendingStudents(JSON.parse(rawPending));
+    } catch {}
+    
+    // Listen for pending students updates
+    const handlePendingUpdate = () => {
+      try {
+        const rawPending = localStorage.getItem("codepvg_pending_students");
+        if (rawPending) setPendingStudents(JSON.parse(rawPending));
+      } catch {}
+    };
+    
+    window.addEventListener("pending-students-updated", handlePendingUpdate);
+    return () => window.removeEventListener("pending-students-updated", handlePendingUpdate);
   }, []);
 
   const toggleSelect = (id: string) =>
@@ -318,9 +348,163 @@ export default function AdminDashboard() {
     window.dispatchEvent(new Event("assigned-problems-updated"));
   };
 
+  // Student validation functions
+  const approveStudent = (studentId: string) => {
+    const updated = pendingStudents.map(student => 
+      student.id === studentId 
+        ? { ...student, status: 'approved' as const }
+        : student
+    );
+    
+    setPendingStudents(updated);
+    localStorage.setItem('codepvg_pending_students', JSON.stringify(updated));
+    
+    // Create approved student profile
+    const approvedStudent = updated.find(s => s.id === studentId);
+    if (approvedStudent) {
+      const studentProfile = {
+        id: approvedStudent.id,
+        name: `${approvedStudent.firstName} ${approvedStudent.middleName || ''} ${approvedStudent.lastName}`.trim(),
+        email: approvedStudent.email,
+        studentId: approvedStudent.studentId,
+        branch: approvedStudent.branch,
+        year: approvedStudent.year,
+        phone: '',
+        photoDataUrl: null,
+        approved: true,
+        approvedAt: new Date().toISOString()
+      };
+      
+      // Store in approved students list
+      const existingApprovedRaw = localStorage.getItem('codepvg_approved_students');
+      const existingApproved = existingApprovedRaw ? JSON.parse(existingApprovedRaw) : [];
+      const updatedApproved = [studentProfile, ...existingApproved];
+      localStorage.setItem('codepvg_approved_students', JSON.stringify(updatedApproved));
+    }
+    
+    window.dispatchEvent(new Event('pending-students-updated'));
+    alert(`Student ${approvedStudent?.firstName} ${approvedStudent?.lastName} has been approved!`);
+  };
+
+  const rejectStudent = (studentId: string) => {
+    const updated = pendingStudents.map(student => 
+      student.id === studentId 
+        ? { ...student, status: 'rejected' as const }
+        : student
+    );
+    
+    setPendingStudents(updated);
+    localStorage.setItem('codepvg_pending_students', JSON.stringify(updated));
+    window.dispatchEvent(new Event('pending-students-updated'));
+    
+    const rejectedStudent = updated.find(s => s.id === studentId);
+    alert(`Student ${rejectedStudent?.firstName} ${rejectedStudent?.lastName} has been rejected.`);
+  };
+
+  const deleteStudentRecord = (studentId: string) => {
+    const updated = pendingStudents.filter(student => student.id !== studentId);
+    setPendingStudents(updated);
+    localStorage.setItem('codepvg_pending_students', JSON.stringify(updated));
+    window.dispatchEvent(new Event('pending-students-updated'));
+  };
+
   return (
     <div className="space-y-10">
       <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
+
+      {/* Student Validation Section */}
+      <div className="p-6 rounded-xl border bg-card space-y-6">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <UserCheck className="text-primary" />
+            <h2 className="font-semibold text-lg">Student Account Validation</h2>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Clock className="w-4 h-4" />
+            <span>{pendingStudents.filter(s => s.status === 'pending').length} pending approvals</span>
+          </div>
+        </div>
+
+        {pendingStudents.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <UserCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>No pending student registrations</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {pendingStudents.map((student) => (
+              <div key={student.id} className="flex items-center justify-between gap-4 p-4 rounded-lg border bg-background">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="font-medium text-lg">
+                      {student.firstName} {student.middleName && student.middleName + ' '}{student.lastName}
+                    </div>
+                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      student.status === 'pending' ? 'bg-yellow-500/10 text-yellow-600' :
+                      student.status === 'approved' ? 'bg-green-500/10 text-green-600' :
+                      'bg-red-500/10 text-red-600'
+                    }`}>
+                      {student.status === 'pending' && <Clock className="w-3 h-3 inline mr-1" />}
+                      {student.status === 'approved' && <CheckCircle className="w-3 h-3 inline mr-1" />}
+                      {student.status === 'rejected' && <XCircle className="w-3 h-3 inline mr-1" />}
+                      {student.status.charAt(0).toUpperCase() + student.status.slice(1)}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm text-muted-foreground">
+                    <div>
+                      <span className="font-medium">Email:</span> {student.email}
+                    </div>
+                    <div>
+                      <span className="font-medium">Student ID:</span> {student.studentId}
+                    </div>
+                    <div>
+                      <span className="font-medium">Branch:</span> {student.branch}
+                    </div>
+                    <div>
+                      <span className="font-medium">Year:</span> {student.year}
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    <span className="font-medium">Submitted:</span> {new Date(student.submittedAt).toLocaleString()}
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {student.status === 'pending' && (
+                    <>
+                      <button
+                        onClick={() => approveStudent(student.id)}
+                        className="px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm font-medium transition-colors flex items-center gap-1"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => rejectStudent(student.id)}
+                        className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm font-medium transition-colors flex items-center gap-1"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        Reject
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete record for ${student.firstName} ${student.lastName}?`)) {
+                        deleteStudentRecord(student.id);
+                      }
+                    }}
+                    className="p-2 rounded-md border hover:bg-muted text-destructive"
+                    title="Delete Record"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Progress Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

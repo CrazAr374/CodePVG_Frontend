@@ -40,14 +40,96 @@ export default function LoginPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Simple client-side redirect based on role
+    
+    // Handle login
     if (authMode === 'login') {
-      if (userType === 'admin') router.push('/admin')
-      else router.push('/dashboard')
+      if (userType === 'admin') {
+        router.push('/admin')
+      } else {
+        // Check if student is approved
+        const approvedStudentsRaw = localStorage.getItem('codepvg_approved_students')
+        const approvedStudents = approvedStudentsRaw ? JSON.parse(approvedStudentsRaw) : []
+        const student = approvedStudents.find((s: any) => s.email === formData.email)
+        
+        if (student) {
+          // Store current student session
+          localStorage.setItem('codepvg_current_student', JSON.stringify(student))
+          router.push('/dashboard')
+        } else {
+          // Check if student is pending or rejected
+          const pendingStudentsRaw = localStorage.getItem('codepvg_pending_students')
+          const pendingStudents = pendingStudentsRaw ? JSON.parse(pendingStudentsRaw) : []
+          const pendingStudent = pendingStudents.find((s: any) => s.email === formData.email)
+          
+          if (pendingStudent) {
+            if (pendingStudent.status === 'pending') {
+              alert('Your account is still pending admin approval. Please wait for approval.')
+            } else if (pendingStudent.status === 'rejected') {
+              alert('Your account has been rejected. Please contact the administrator.')
+            }
+          } else {
+            alert('Account not found. Please check your credentials or register first.')
+          }
+        }
+      }
+      return
+    }
+    
+    // Handle signup
+    if (userType === 'admin') {
+      // Admin signup - create account immediately
+      router.push('/admin')
     } else {
-      // After signup, route to respective home for demo
-      if (userType === 'admin') router.push('/admin')
-      else router.push('/dashboard')
+      // Student signup - store for admin validation
+      const pendingStudent = {
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        email: formData.email,
+        firstName: formData.firstName,
+        middleName: formData.middleName,
+        lastName: formData.lastName,
+        studentId: formData.studentId,
+        branch: formData.branch,
+        year: formData.year,
+        status: 'pending',
+        submittedAt: new Date().toISOString(),
+        password: formData.password // In real app, this would be hashed
+      }
+      
+      // Get existing pending students
+      const existingRaw = localStorage.getItem('codepvg_pending_students')
+      const existing = existingRaw ? JSON.parse(existingRaw) : []
+      
+      // Check if email already exists
+      const emailExists = existing.some((s: any) => s.email === formData.email)
+      if (emailExists) {
+        alert('An account with this email already exists. Please use a different email or try logging in.')
+        return
+      }
+      
+      // Add new student to pending list
+      const updated = [pendingStudent, ...existing]
+      localStorage.setItem('codepvg_pending_students', JSON.stringify(updated))
+      
+      // Dispatch event to notify admin dashboard
+      window.dispatchEvent(new Event('pending-students-updated'))
+      
+      // Show confirmation message instead of redirecting
+      alert('Registration submitted successfully! Your account is pending admin approval. You will be notified once approved.')
+      
+      // Reset form
+      setFormData({
+        email: '',
+        password: '',
+        confirmPassword: '',
+        firstName: '',
+        middleName: '',
+        lastName: '',
+        studentId: '',
+        adminCode: '',
+        department: '',
+        branch: '',
+        year: '',
+      })
     }
   }
 

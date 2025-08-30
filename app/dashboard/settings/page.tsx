@@ -36,6 +36,27 @@ export default function SettingsPage() {
   // Load current values from localStorage
   useEffect(() => {
     try {
+      // First check if there's a current student session
+      const currentStudentRaw = localStorage.getItem("codepvg_current_student");
+      if (currentStudentRaw) {
+        const currentStudent = JSON.parse(currentStudentRaw);
+        // Initialize profile from approved student data
+        const initialProfile = {
+          name: currentStudent.name,
+          email: currentStudent.email,
+          phone: '',
+          year: currentStudent.year,
+          branch: currentStudent.branch,
+          photoDataUrl: currentStudent.photoDataUrl || null
+        };
+        setProfile({ ...DEFAULT_PROFILE, ...initialProfile });
+        
+        // Also save to profile storage for consistency
+        localStorage.setItem("codepvg_profile", JSON.stringify({ ...DEFAULT_PROFILE, ...initialProfile }));
+        return;
+      }
+      
+      // Fallback to existing profile data
       const raw = localStorage.getItem("codepvg_profile");
       if (raw) {
         const parsed = JSON.parse(raw) as Profile;

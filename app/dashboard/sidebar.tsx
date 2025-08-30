@@ -42,6 +42,23 @@ export default function Sidebar() {
   // Load profile from localStorage
   const loadProfile = () => {
     try {
+      // First check if there's a current student session
+      const currentStudentRaw = localStorage.getItem("codepvg_current_student");
+      if (currentStudentRaw) {
+        const currentStudent = JSON.parse(currentStudentRaw);
+        const profileFromStudent = {
+          name: currentStudent.name,
+          email: currentStudent.email,
+          phone: '',
+          year: currentStudent.year,
+          branch: currentStudent.branch,
+          photoDataUrl: currentStudent.photoDataUrl || null
+        };
+        setProfile({ ...DEFAULT_PROFILE, ...profileFromStudent });
+        return;
+      }
+      
+      // Fallback to profile storage
       const raw = localStorage.getItem("codepvg_profile");
       if (raw) {
         const parsed = JSON.parse(raw) as Profile;
@@ -75,9 +92,9 @@ export default function Sidebar() {
   }, []);
 
   const logout = () => {
-    // UI-only demo logout
-    // If you later add real auth, replace this.
+    // Clear all student session data
     localStorage.removeItem("codepvg_profile");
+    localStorage.removeItem("codepvg_current_student");
     setMenuOpen(false);
     router.push("/login");
   };
